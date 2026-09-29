@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Управление ботом на сервере. Ставится в /usr/local/bin/kwork-bot скриптом deploy/install.sh.
+set -euo pipefail
+
+APP_DIR=/opt/kwork-bot
+APP_USER=kworkbot
+SERVICE=kwork-bot
+
+[ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
+
+run_as_app() {
+    (cd "$APP_DIR" && runuser -u "$APP_USER" -- "$APP_DIR/.venv/bin/python" -m kwork_bot "$@")
+}
+
+usage() {
+    cat <<'EOF'
+Использование: kwork-bot <команда>
+
+  status    работает ли бот
+  logs      логи в реальном времени (выход — Ctrl+C)
+  start     запустить
+  stop      остановить
+  restart   перезапустить
+  setup     поменять токен или доступ (бот перезапустится)
+  check     проверить связь с Telegram и Kwork
+  config    открыть файл настроек .env в редакторе (бот перезапустится)
+  update    скачать новую версию из git и перезапустить
+EOF
+}
+
+cmd=${1:-help}
+shift || true
+
+case "$cmd" in
+    status)
+        systemctl status "$SERVICE" --no-pager || true ;;
+    logs)
+        journalctl -u "$SERVICE" -f -n 50 ;;
+    start|stop|restart)
+        systemctl "$cmd" "$SERVICE"
+        echo "Готово: $cmd" ;;
+    setup)
+        run_as_app setup "$@"
+        systemctl restart "$SERVICE"
+        echo "Бот перезапущен с новыми настройками." ;;
+    check)
+        run_as_app check ;;
+    config)
+        "${EDITOR:-$(command -v nano || command -v vi)}" "$APP_DIR/.env"
+        chown "$APP_USER:$APP_USER" "$APP_DIR/.env"
+        systemctl restart "$SERVICE"
+        echo "Бот перезапущен с новыми настройками." ;;
+    update)
+        src=$(cat "$APP_DIR/.source" 2>/dev/null || true)
+        [ -d "$src/.git" ] || { echo "Не найдена папка с git-копией проекта ($src). Обновите код вручную и запустите deploy/install.sh." >&2; exit 1; }
+        runuser -u "$(stat -c %U "$src")" -- git -C "$src" pull --ff-only
+        bash "$src/deploy/install.sh" ;;
+    help|-h|--help)
+        usage ;;
+    *)
+        usage
+        exit 1 ;;
+esac
