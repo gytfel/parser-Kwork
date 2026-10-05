@@ -117,8 +117,14 @@ bash deploy/install.sh
 ```bash
 sudo systemctl disable --now kwork-bot
 sudo rm -rf /opt/kwork-bot /etc/systemd/system/kwork-bot.service /usr/local/bin/kwork-bot
+sudo systemctl daemon-reload
 sudo userdel kworkbot
+rm -rf ~/parser-Kwork      # папка, куда вы клонировали проект
 ```
+
+Вместе с `/opt/kwork-bot` удалятся настройки (`.env` с токеном) и база.
+Сам бот в Telegram при этом останется. Удалить его можно у @BotFather
+командой `/deletebot`.
 
 ---
 
